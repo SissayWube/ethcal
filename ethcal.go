@@ -1,0 +1,189 @@
+// Package ethcal converts dates between the Ethiopian calendar (EC) and the
+// Gregorian calendar (GC) using Julian Day Numbers.
+//
+// The Ethiopian calendar has 13 months: twelve of 30 days and a final month,
+// Pagume, of 5 days (6 in a leap year). A leap year is any year where
+// year % 4 == 3. The new year (1 Meskerem) falls on 11 September in the
+// Gregorian calendar, or 12 September in the year before a Gregorian leap year.
+package ethcal
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// Julian Day Number offset of the Ethiopian (Amete Mihret) epoch.
+const jdnEpoch = 1723856
+
+// Julian Day Number of the Unix epoch (1970-01-01).
+const jdnUnixEpoch = 2440588
+
+// Errors returned by this package.
+var (
+	ErrInvalidMonth = errors.New("ethcal: month must be between 1 and 13")
+	ErrInvalidDay   = errors.New("ethcal: day is out of range for the given month")
+	ErrInvalidYear  = errors.New("ethcal: year must be 1 or greater")
+)
+
+// Date is a date in the Ethiopian calendar.
+type Date struct {
+	Year  int
+	Month int // 1 (Meskerem) .. 13 (Pagume)
+	Day   int
+}
+
+var monthsEnglish = [13]string{
+	"Meskerem", "Tikimt", "Hidar", "Tahsas", "Tir", "Yekatit", "Megabit",
+	"Miazia", "Genbot", "Sene", "Hamle", "Nehase", "Pagume",
+}
+
+var monthsAmharic = [13]string{
+	"መስከረም", "ጥቅምት", "ኅዳር", "ታኅሣሥ", "ጥር", "የካቲት", "መጋቢት",
+	"ሚያዝያ", "ግንቦት", "ሰኔ", "ሐምሌ", "ነሐሴ", "ጳጉሜን",
+}
+
+// IsLeapYear reports whether the Ethiopian year is a leap year.
+func IsLeapYear(year int) bool {
+	return mod(year, 4) == 3
+}
+
+// DaysInMonth returns the number of days in the given Ethiopian month.
+func DaysInMonth(year, month int) (int, error) {
+	switch {
+	case month < 1 || month > 13:
+		return 0, ErrInvalidMonth
+	case month < 13:
+		return 30, nil
+	case IsLeapYear(year):
+		return 6, nil
+	default:
+		return 5, nil
+	}
+}
+
+// MonthName returns the English (transliterated) name of an Ethiopian month.
+func MonthName(month int) string {
+	if month < 1 || month > 13 {
+		return ""
+	}
+	return monthsEnglish[month-1]
+}
+
+// MonthNameAmharic returns the Amharic name of an Ethiopian month.
+func MonthNameAmharic(month int) string {
+	if month < 1 || month > 13 {
+		return ""
+	}
+	return monthsAmharic[month-1]
+}
+
+// New validates and returns an Ethiopian Date.
+func New(year, month, day int) (Date, error) {
+	d := Date{year, month, day}
+	return d, d.Validate()
+}
+
+// Validate checks that the date exists in the Ethiopian calendar.
+func (d Date) Validate() error {
+	if d.Year < 1 {
+		return ErrInvalidYear
+	}
+	n, err := DaysInMonth(d.Year, d.Month)
+	if err != nil {
+		return err
+	}
+	if d.Day < 1 || d.Day > n {
+		return ErrInvalidDay
+	}
+	return nil
+}
+
+// String formats the date as "YYYY-MM-DD".
+func (d Date) String() string {
+	return fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day)
+}
+
+// Format returns a long-form date such as "1 Meskerem 2000".
+func (d Date) Format() string {
+	return fmt.Sprintf("%d %s %d", d.Day, MonthName(d.Month), d.Year)
+}
+
+// FormatAmharic returns a long-form date using the Amharic month name.
+func (d Date) FormatAmharic() string {
+	return fmt.Sprintf("%s %d, %d", MonthNameAmharic(d.Month), d.Day, d.Year)
+}
+
+// ToGregorian converts the Ethiopian date to a time.Time (midnight UTC).
+func (d Date) ToGregorian() (time.Time, error) {
+	if err := d.Validate(); err != nil {
+		return time.Time{}, err
+	}
+	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
+	return time.Unix(int64(jdn-jdnUnixEpoch)*86400, 0).UTC(), nil
+}
+
+// ToGregorianYMD converts an Ethiopian date to Gregorian year, month, day.
+func ToGregorianYMD(year, month, day int) (int, time.Month, int, error) {
+	t, err := Date{year, month, day}.ToGregorian()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	y, m, dd := t.Date()
+	return y, m, dd, nil
+}
+
+// FromGregorian converts a time.Time to an Ethiopian Date. Only the calendar
+// date in t's own location is used.
+func FromGregorian(t time.Time) Date {
+	y, m, d := t.Date()
+	days := floorDiv(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix(), 86400)
+	return jdnToEthiopic(int(days) + jdnUnixEpoch)
+}
+
+// FromGregorianYMD converts a Gregorian year, month, day to an Ethiopian Date.
+// It returns an error if the Gregorian date does not exist (e.g. 30 Feb).
+func FromGregorianYMD(year int, month time.Month, day int) (Date, error) {
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	if t.Year() != year || t.Month() != month || t.Day() != day {
+		return Date{}, errors.New("ethcal: invalid Gregorian date")
+	}
+	return FromGregorian(t), nil
+}
+
+// Today returns the current Ethiopian date in the local time zone.
+func Today() Date { return FromGregorian(time.Now()) }
+
+// AddDays returns the Ethiopian date n days after (or before, if negative) d.
+func (d Date) AddDays(n int) (Date, error) {
+	if err := d.Validate(); err != nil {
+		return Date{}, err
+	}
+	return jdnToEthiopic(ethiopicToJDN(d.Year, d.Month, d.Day) + n), nil
+}
+
+func ethiopicToJDN(year, month, day int) int {
+	return jdnEpoch + 365 + 365*(year-1) + floorDiv(year, 4) + 30*month + day - 31
+}
+
+func jdnToEthiopic(jdn int) Date {
+	r := mod(jdn-jdnEpoch, 1461)
+	n := r%365 + 365*(r/1460)
+	return Date{
+		Year:  4*floorDiv(jdn-jdnEpoch, 1461) + r/365 - r/1460,
+		Month: n/30 + 1,
+		Day:   n%30 + 1,
+	}
+}
+
+func floorDiv[T int | int64](a, b T) T {
+	q := a / b
+	if (a%b != 0) && ((a < 0) != (b < 0)) {
+		q--
+	}
+	return q
+}
+
+func mod(a, b int) int {
+	return ((a % b) + b) % b
+}
