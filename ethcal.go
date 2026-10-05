@@ -19,6 +19,9 @@ const jdnEpoch = 1723856
 // Julian Day Number of the Unix epoch (1970-01-01).
 const jdnUnixEpoch = 2440588
 
+// EAT is East Africa Time (UTC+3), the standard time zone for Ethiopia.
+var EAT = time.FixedZone("EAT", 3*60*60)
+
 // Errors returned by this package.
 var (
 	ErrInvalidMonth = errors.New("ethcal: month must be between 1 and 13")
@@ -142,6 +145,21 @@ func FromYMD(year int, month time.Month, day int) (Date, error) {
 // Today returns the current Ethiopian date in the local time zone.
 func Today() Date { return FromTime(time.Now()) }
 
+// TodayUTC returns the current Ethiopian date in UTC.
+func TodayUTC() Date { return FromTime(time.Now().UTC()) }
+
+// TodayEAT returns the current Ethiopian date in East Africa Time (UTC+3).
+func TodayEAT() Date { return FromTime(time.Now().In(EAT)) }
+
+// TodayIn returns the current Ethiopian date in the specified location.
+// If loc is nil, UTC is used.
+func TodayIn(loc *time.Location) Date {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return FromTime(time.Now().In(loc))
+}
+
 // Validate checks that the date exists in the Ethiopian calendar.
 func (d Date) Validate() error {
 	if d.Year < 1 {
@@ -187,11 +205,22 @@ func (d Date) Weekday() Weekday {
 
 // Gregorian converts the Ethiopian date to a time.Time (midnight UTC).
 func (d Date) Gregorian() (time.Time, error) {
+	return d.GregorianIn(time.UTC)
+}
+
+// GregorianIn converts the Ethiopian date to a time.Time (midnight in loc).
+// If loc is nil, UTC is used.
+func (d Date) GregorianIn(loc *time.Location) (time.Time, error) {
 	if err := d.Validate(); err != nil {
 		return time.Time{}, err
 	}
+	if loc == nil {
+		loc = time.UTC
+	}
 	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
-	return time.Unix(int64(jdn-jdnUnixEpoch)*86400, 0).UTC(), nil
+	tUTC := time.Unix(int64(jdn-jdnUnixEpoch)*86400, 0).UTC()
+	y, m, day := tUTC.Date()
+	return time.Date(y, m, day, 0, 0, 0, 0, loc), nil
 }
 
 // GregorianYMD converts the Ethiopian date to Gregorian year, month, day.

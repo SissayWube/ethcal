@@ -191,9 +191,69 @@ func TestToday(t *testing.T) {
 	if d.Year < 2010 {
 		t.Errorf("Today() year = %d; seems too low", d.Year)
 	}
+
+	dUTC := TodayUTC()
+	if err := dUTC.Validate(); err != nil {
+		t.Errorf("TodayUTC() = %v is invalid: %v", dUTC, err)
+	}
+
+	dEAT := TodayEAT()
+	if err := dEAT.Validate(); err != nil {
+		t.Errorf("TodayEAT() = %v is invalid: %v", dEAT, err)
+	}
+
+	dIn := TodayIn(EAT)
+	if err := dIn.Validate(); err != nil {
+		t.Errorf("TodayIn(EAT) = %v is invalid: %v", dIn, err)
+	}
+
+	dNil := TodayIn(nil)
+	if err := dNil.Validate(); err != nil {
+		t.Errorf("TodayIn(nil) = %v is invalid: %v", dNil, err)
+	}
 }
 
 // ---- Gregorian conversions ----
+
+func TestGregorianIn(t *testing.T) {
+	d := Date{2016, 1, 1}
+
+	// UTC
+	tUTC, err := d.GregorianIn(time.UTC)
+	if err != nil {
+		t.Fatalf("GregorianIn(UTC) err: %v", err)
+	}
+	if tUTC.Location() != time.UTC || tUTC.Year() != 2023 || tUTC.Month() != time.September || tUTC.Day() != 12 || tUTC.Hour() != 0 {
+		t.Errorf("unexpected tUTC: %v", tUTC)
+	}
+
+	// nil location defaults to UTC
+	tNil, err := d.GregorianIn(nil)
+	if err != nil || !tNil.Equal(tUTC) || tNil.Location() != time.UTC {
+		t.Errorf("GregorianIn(nil) = %v, %v; want %v in UTC", tNil, err, tUTC)
+	}
+
+	// Gregorian() shorthand matches GregorianIn(time.UTC)
+	tGreg, err := d.Gregorian()
+	if err != nil || !tGreg.Equal(tUTC) {
+		t.Errorf("Gregorian() = %v; want %v", tGreg, tUTC)
+	}
+
+	// EAT (UTC+3)
+	tEAT, err := d.GregorianIn(EAT)
+	if err != nil {
+		t.Fatalf("GregorianIn(EAT) err: %v", err)
+	}
+	if tEAT.Location() != EAT || tEAT.Hour() != 0 || tEAT.Day() != 12 {
+		t.Errorf("unexpected tEAT: %v", tEAT)
+	}
+
+	// Invalid date
+	_, err = (Date{0, 1, 1}).GregorianIn(time.UTC)
+	if err == nil {
+		t.Error("GregorianIn on invalid date should fail")
+	}
+}
 
 func TestGregorianYMD(t *testing.T) {
 	y, m, d, err := (Date{2016, 1, 1}).GregorianYMD()
