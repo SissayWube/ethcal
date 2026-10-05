@@ -26,6 +26,43 @@ var (
 	ErrInvalidYear  = errors.New("ethcal: year must be 1 or greater")
 )
 
+// Weekday represents an Ethiopian day of the week.
+type Weekday int
+
+const (
+	Segno    Weekday = iota // ሰኞ — Monday
+	Maksegno                // ማክሰኞ — Tuesday
+	Rob                     // ረቡዕ — Wednesday
+	Hamus                   // ሐሙስ — Thursday
+	Arb                     // ዓርብ — Friday
+	Kidame                  // ቅዳሜ — Saturday
+	Ihud                    // እሁድ — Sunday
+)
+
+var weekdayNamesEnglish = [7]string{
+	"Segno", "Maksegno", "Rob", "Hamus", "Arb", "Kidame", "Ihud",
+}
+
+var weekdayNamesAmharic = [7]string{
+	"ሰኞ", "ማክሰኞ", "ረቡዕ", "ሐሙስ", "ዓርብ", "ቅዳሜ", "እሁድ",
+}
+
+// String returns the English (transliterated) name of the weekday.
+func (w Weekday) String() string {
+	if w < Segno || w > Ihud {
+		return ""
+	}
+	return weekdayNamesEnglish[w]
+}
+
+// Amharic returns the Amharic name of the weekday.
+func (w Weekday) Amharic() string {
+	if w < Segno || w > Ihud {
+		return ""
+	}
+	return weekdayNamesAmharic[w]
+}
+
 // Date is a date in the Ethiopian calendar.
 type Date struct {
 	Year  int
@@ -84,6 +121,27 @@ func New(year, month, day int) (Date, error) {
 	return d, d.Validate()
 }
 
+// FromTime converts a time.Time to an Ethiopian Date. Only the calendar
+// date in t's own location is used.
+func FromTime(t time.Time) Date {
+	y, m, d := t.Date()
+	days := floorDiv(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix(), 86400)
+	return jdnToEthiopic(int(days) + jdnUnixEpoch)
+}
+
+// FromYMD converts a Gregorian year, month, day to an Ethiopian Date.
+// It returns an error if the Gregorian date does not exist (e.g. 30 Feb).
+func FromYMD(year int, month time.Month, day int) (Date, error) {
+	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+	if t.Year() != year || t.Month() != month || t.Day() != day {
+		return Date{}, errors.New("ethcal: invalid Gregorian date")
+	}
+	return FromTime(t), nil
+}
+
+// Today returns the current Ethiopian date in the local time zone.
+func Today() Date { return FromTime(time.Now()) }
+
 // Validate checks that the date exists in the Ethiopian calendar.
 func (d Date) Validate() error {
 	if d.Year < 1 {
@@ -99,13 +157,18 @@ func (d Date) Validate() error {
 	return nil
 }
 
+// Equal reports whether d and other represent the same date.
+func (d Date) Equal(other Date) bool {
+	return d.Year == other.Year && d.Month == other.Month && d.Day == other.Day
+}
+
 // String formats the date as "YYYY-MM-DD".
 func (d Date) String() string {
 	return fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day)
 }
 
-// Format returns a long-form date such as "1 Meskerem 2000".
-func (d Date) Format() string {
+// FormatLong returns a long-form date such as "1 Meskerem 2000".
+func (d Date) FormatLong() string {
 	return fmt.Sprintf("%d %s %d", d.Day, MonthName(d.Month), d.Year)
 }
 
@@ -114,8 +177,16 @@ func (d Date) FormatAmharic() string {
 	return fmt.Sprintf("%s %d, %d", MonthNameAmharic(d.Month), d.Day, d.Year)
 }
 
-// ToGregorian converts the Ethiopian date to a time.Time (midnight UTC).
-func (d Date) ToGregorian() (time.Time, error) {
+// Weekday returns the Ethiopian day of the week for this date.
+func (d Date) Weekday() Weekday {
+	// JDN mod 7 gives: 0=Monday, 1=Tuesday, ..., 6=Sunday,
+	// which aligns with the Weekday constants.
+	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
+	return Weekday(mod(jdn, 7))
+}
+
+// Gregorian converts the Ethiopian date to a time.Time (midnight UTC).
+func (d Date) Gregorian() (time.Time, error) {
 	if err := d.Validate(); err != nil {
 		return time.Time{}, err
 	}
@@ -123,36 +194,15 @@ func (d Date) ToGregorian() (time.Time, error) {
 	return time.Unix(int64(jdn-jdnUnixEpoch)*86400, 0).UTC(), nil
 }
 
-// ToGregorianYMD converts an Ethiopian date to Gregorian year, month, day.
-func ToGregorianYMD(year, month, day int) (int, time.Month, int, error) {
-	t, err := Date{year, month, day}.ToGregorian()
+// GregorianYMD converts the Ethiopian date to Gregorian year, month, day.
+func (d Date) GregorianYMD() (int, time.Month, int, error) {
+	t, err := d.Gregorian()
 	if err != nil {
 		return 0, 0, 0, err
 	}
 	y, m, dd := t.Date()
 	return y, m, dd, nil
 }
-
-// FromGregorian converts a time.Time to an Ethiopian Date. Only the calendar
-// date in t's own location is used.
-func FromGregorian(t time.Time) Date {
-	y, m, d := t.Date()
-	days := floorDiv(time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix(), 86400)
-	return jdnToEthiopic(int(days) + jdnUnixEpoch)
-}
-
-// FromGregorianYMD converts a Gregorian year, month, day to an Ethiopian Date.
-// It returns an error if the Gregorian date does not exist (e.g. 30 Feb).
-func FromGregorianYMD(year int, month time.Month, day int) (Date, error) {
-	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
-	if t.Year() != year || t.Month() != month || t.Day() != day {
-		return Date{}, errors.New("ethcal: invalid Gregorian date")
-	}
-	return FromGregorian(t), nil
-}
-
-// Today returns the current Ethiopian date in the local time zone.
-func Today() Date { return FromGregorian(time.Now()) }
 
 // AddDays returns the Ethiopian date n days after (or before, if negative) d.
 func (d Date) AddDays(n int) (Date, error) {
@@ -161,6 +211,50 @@ func (d Date) AddDays(n int) (Date, error) {
 	}
 	return jdnToEthiopic(ethiopicToJDN(d.Year, d.Month, d.Day) + n), nil
 }
+
+// AddMonths returns the Ethiopian date n months after (or before) d.
+// If the resulting month has fewer days than d.Day, the day is clamped to
+// the last valid day of that month.
+func (d Date) AddMonths(n int) (Date, error) {
+	if err := d.Validate(); err != nil {
+		return Date{}, err
+	}
+	totalMonths := (d.Year-1)*13 + (d.Month - 1) + n
+	y := floorDiv(totalMonths, 13) + 1
+	m := mod(totalMonths, 13) + 1
+	if y < 1 {
+		return Date{}, ErrInvalidYear
+	}
+	maxDay, _ := DaysInMonth(y, m)
+	day := d.Day
+	if day > maxDay {
+		day = maxDay
+	}
+	return Date{y, m, day}, nil
+}
+
+// AddYears returns the Ethiopian date n years after (or before) d.
+// If d is Pagume 6 in a leap year and the target year is not a leap year,
+// the day is clamped to Pagume 5.
+func (d Date) AddYears(n int) (Date, error) {
+	if err := d.Validate(); err != nil {
+		return Date{}, err
+	}
+	y := d.Year + n
+	if y < 1 {
+		return Date{}, ErrInvalidYear
+	}
+	day := d.Day
+	if d.Month == 13 {
+		maxDay, _ := DaysInMonth(y, 13)
+		if day > maxDay {
+			day = maxDay
+		}
+	}
+	return Date{y, d.Month, day}, nil
+}
+
+// ---- internal helpers ----
 
 func ethiopicToJDN(year, month, day int) int {
 	return jdnEpoch + 365 + 365*(year-1) + floorDiv(year, 4) + 30*month + day - 31
@@ -187,3 +281,4 @@ func floorDiv[T int | int64](a, b T) T {
 func mod(a, b int) int {
 	return ((a % b) + b) % b
 }
+
