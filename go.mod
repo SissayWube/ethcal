@@ -1,3 +1,3 @@
-module github.com/SissayWube/ethcal
+module ethcal
 
 go 1.27.0
