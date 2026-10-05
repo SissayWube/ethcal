@@ -3,7 +3,7 @@
 Convert dates between the Ethiopian calendar (EC) and Gregorian calendar (GC) in Go. No dependencies.
 
 ```go
-import "github.com/yourname/ethcal"
+import "github.com/SissayWube/ethcal"
 
 // EC → GC
 t, _ := ethcal.Date{Year: 2016, Month: 1, Day: 1}.Gregorian()
