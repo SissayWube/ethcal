@@ -19,9 +19,9 @@ func TestKnownDates(t *testing.T) {
 		{Date{1, 1, 1}, time.Date(8, 8, 27, 0, 0, 0, 0, time.UTC)},
 	}
 	for _, c := range cases {
-		got, err := c.ec.Gregorian()
+		got, err := c.ec.ToGregorian()
 		if err != nil || !got.Equal(c.gc) {
-			t.Errorf("Gregorian(%v) = %v, %v; want %v", c.ec, got, err, c.gc)
+			t.Errorf("ToGregorian(%v) = %v, %v; want %v", c.ec, got, err, c.gc)
 		}
 		if back := FromTime(c.gc); back != c.ec {
 			t.Errorf("FromTime(%v) = %v; want %v", c.gc, back, c.ec)
@@ -37,7 +37,7 @@ func TestRoundTrip(t *testing.T) {
 		if err := e.Validate(); err != nil {
 			t.Fatalf("%v -> invalid %v: %v", g, e, err)
 		}
-		back, _ := e.Gregorian()
+		back, _ := e.ToGregorian()
 		if !back.Equal(g) {
 			t.Fatalf("round trip failed: %v -> %v -> %v", g, e, back)
 		}
@@ -95,21 +95,21 @@ func TestWeekdayNames(t *testing.T) {
 	}
 }
 
-// ---- Equal ----
+// ---- Equality ----
 
-func TestEqual(t *testing.T) {
+func TestEquality(t *testing.T) {
 	a := Date{2016, 1, 1}
 	b := Date{2016, 1, 1}
 	c := Date{2016, 1, 2}
-	if !a.Equal(b) {
-		t.Error("same dates should be equal")
+	if a != b {
+		t.Error("same dates should be equal using ==")
 	}
-	if a.Equal(c) {
-		t.Error("different dates should not be equal")
+	if a == c {
+		t.Error("different dates should not be equal using ==")
 	}
 }
 
-// ---- String / FormatLong / FormatAmharic ----
+// ---- String / Format / Amharic ----
 
 func TestString(t *testing.T) {
 	d := Date{2016, 1, 5}
@@ -122,17 +122,17 @@ func TestString(t *testing.T) {
 	}
 }
 
-func TestFormatLong(t *testing.T) {
+func TestFormat(t *testing.T) {
 	d := Date{2017, 1, 1}
-	if s := d.FormatLong(); s != "1 Meskerem 2017" {
-		t.Errorf("FormatLong() = %q", s)
+	if s := d.Format(); s != "1 Meskerem 2017" {
+		t.Errorf("Format() = %q", s)
 	}
 }
 
-func TestFormatAmharic(t *testing.T) {
+func TestAmharic(t *testing.T) {
 	d := Date{2017, 1, 1}
-	if s := d.FormatAmharic(); s != "መስከረም 1, 2017" {
-		t.Errorf("FormatAmharic() = %q", s)
+	if s := d.Amharic(); s != "መስከረም 1, 2017" {
+		t.Errorf("Amharic() = %q", s)
 	}
 }
 
@@ -172,32 +172,14 @@ func TestNew(t *testing.T) {
 	}
 }
 
-func TestFromYMD(t *testing.T) {
-	d, err := FromYMD(2023, time.September, 12)
+func TestFromGregorian(t *testing.T) {
+	d, err := FromGregorian(2023, time.September, 12)
 	if err != nil || d != (Date{2016, 1, 1}) {
-		t.Errorf("FromYMD(2023, Sep, 12) = %v, %v", d, err)
+		t.Errorf("FromGregorian(2023, Sep, 12) = %v, %v", d, err)
 	}
-	_, err = FromYMD(2023, time.February, 30)
+	_, err = FromGregorian(2023, time.February, 30)
 	if err == nil {
 		t.Error("Feb 30 should be invalid")
-	}
-}
-
-func TestFromUTC(t *testing.T) {
-	// Basic: 2023-09-12 UTC → Ethiopian 2016-01-01
-	utcTime := time.Date(2023, time.September, 12, 15, 30, 0, 0, time.UTC)
-	got := FromUTC(utcTime)
-	want := Date{2016, 1, 1}
-	if got != want {
-		t.Errorf("FromUTC(%v) = %v; want %v", utcTime, got, want)
-	}
-
-	// Non-UTC input: 2023-09-13 00:30 EAT (= 2023-09-12 21:30 UTC)
-	// FromUTC should use the UTC date (Sep 12), not the EAT date (Sep 13).
-	eatTime := time.Date(2023, time.September, 13, 0, 30, 0, 0, EAT)
-	got = FromUTC(eatTime)
-	if got != want {
-		t.Errorf("FromUTC(%v) = %v; want %v (UTC date)", eatTime, got, want)
 	}
 }
 
@@ -210,19 +192,14 @@ func TestToday(t *testing.T) {
 		t.Errorf("Today() year = %d; seems too low", d.Year)
 	}
 
-	dUTC := TodayUTC()
-	if err := dUTC.Validate(); err != nil {
-		t.Errorf("TodayUTC() = %v is invalid: %v", dUTC, err)
-	}
-
-	dEAT := TodayEAT()
+	dEAT := TodayIn(EAT)
 	if err := dEAT.Validate(); err != nil {
-		t.Errorf("TodayEAT() = %v is invalid: %v", dEAT, err)
+		t.Errorf("TodayIn(EAT) = %v is invalid: %v", dEAT, err)
 	}
 
-	dIn := TodayIn(EAT)
-	if err := dIn.Validate(); err != nil {
-		t.Errorf("TodayIn(EAT) = %v is invalid: %v", dIn, err)
+	dUTC := TodayIn(time.UTC)
+	if err := dUTC.Validate(); err != nil {
+		t.Errorf("TodayIn(time.UTC) = %v is invalid: %v", dUTC, err)
 	}
 
 	dNil := TodayIn(nil)
@@ -233,65 +210,25 @@ func TestToday(t *testing.T) {
 
 // ---- Gregorian conversions ----
 
-func TestGregorianIn(t *testing.T) {
+func TestToGregorian(t *testing.T) {
 	d := Date{2016, 1, 1}
-
-	// UTC
-	tUTC, err := d.GregorianIn(time.UTC)
+	got, err := d.ToGregorian()
 	if err != nil {
-		t.Fatalf("GregorianIn(UTC) err: %v", err)
+		t.Fatalf("ToGregorian() err: %v", err)
 	}
-	if tUTC.Location() != time.UTC || tUTC.Year() != 2023 || tUTC.Month() != time.September || tUTC.Day() != 12 || tUTC.Hour() != 0 {
-		t.Errorf("unexpected tUTC: %v", tUTC)
-	}
-
-	// nil location defaults to UTC
-	tNil, err := d.GregorianIn(nil)
-	if err != nil || !tNil.Equal(tUTC) || tNil.Location() != time.UTC {
-		t.Errorf("GregorianIn(nil) = %v, %v; want %v in UTC", tNil, err, tUTC)
+	want := time.Date(2023, time.September, 12, 0, 0, 0, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Errorf("ToGregorian() = %v; want %v", got, want)
 	}
 
-	// Gregorian() shorthand matches GregorianIn(time.UTC)
-	tGreg, err := d.Gregorian()
-	if err != nil || !tGreg.Equal(tUTC) {
-		t.Errorf("Gregorian() = %v; want %v", tGreg, tUTC)
-	}
-
-	// EAT (UTC+3)
-	tEAT, err := d.GregorianIn(EAT)
-	if err != nil {
-		t.Fatalf("GregorianIn(EAT) err: %v", err)
-	}
-	if tEAT.Location() != EAT || tEAT.Hour() != 0 || tEAT.Day() != 12 {
-		t.Errorf("unexpected tEAT: %v", tEAT)
-	}
-
-	// Invalid date
-	_, err = (Date{0, 1, 1}).GregorianIn(time.UTC)
+	// Invalid dates
+	_, err = (Date{0, 1, 1}).ToGregorian()
 	if err == nil {
-		t.Error("GregorianIn on invalid date should fail")
+		t.Error("ToGregorian on year 0 should fail")
 	}
-}
-
-func TestGregorianYMD(t *testing.T) {
-	y, m, d, err := (Date{2016, 1, 1}).GregorianYMD()
-	if err != nil || y != 2023 || m != time.September || d != 12 {
-		t.Errorf("GregorianYMD() = %d-%v-%d, %v", y, m, d, err)
-	}
-	_, _, _, err = (Date{0, 1, 1}).GregorianYMD()
+	_, err = (Date{2016, 14, 1}).ToGregorian()
 	if err == nil {
-		t.Error("year 0 should fail")
-	}
-}
-
-func TestGregorian_Invalid(t *testing.T) {
-	_, err := (Date{0, 1, 1}).Gregorian()
-	if err == nil {
-		t.Error("Gregorian on year 0 should fail")
-	}
-	_, err = (Date{2016, 14, 1}).Gregorian()
-	if err == nil {
-		t.Error("Gregorian on month 14 should fail")
+		t.Error("ToGregorian on month 14 should fail")
 	}
 }
 
@@ -347,21 +284,21 @@ func TestFromUnixMilli(t *testing.T) {
 	}
 }
 
-func TestISO(t *testing.T) {
+func TestToISO(t *testing.T) {
 	d := Date{2016, 1, 1}
-	got, err := d.ISO()
+	got, err := d.ToISO()
 	if err != nil {
-		t.Fatalf("ISO() err: %v", err)
+		t.Fatalf("ToISO() err: %v", err)
 	}
 	want := "2023-09-12T00:00:00Z"
 	if got != want {
-		t.Errorf("ISO() = %q; want %q", got, want)
+		t.Errorf("ToISO() = %q; want %q", got, want)
 	}
 
 	// Invalid date
-	_, err = (Date{0, 1, 1}).ISO()
+	_, err = (Date{0, 1, 1}).ToISO()
 	if err == nil {
-		t.Error("ISO on invalid date should fail")
+		t.Error("ToISO on invalid date should fail")
 	}
 }
 

@@ -120,6 +120,8 @@ func MonthNameAmharic(month int) string {
 	return monthsAmharic[month-1]
 }
 
+// ---- Constructors ----
+
 // New validates and returns an Ethiopian Date.
 func New(year, month, day int) (Date, error) {
 	d := Date{year, month, day}
@@ -134,114 +136,15 @@ func FromTime(t time.Time) Date {
 	return jdnToEthiopic(int(days) + jdnUnixEpoch)
 }
 
-// FromYMD converts a Gregorian year, month, day to an Ethiopian Date.
+// FromGregorian converts a Gregorian year, month, day to an Ethiopian Date.
 // It returns an error if the Gregorian date does not exist (e.g. 30 Feb).
-func FromYMD(year int, month time.Month, day int) (Date, error) {
+func FromGregorian(year int, month time.Month, day int) (Date, error) {
 	t := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 	if t.Year() != year || t.Month() != month || t.Day() != day {
 		return Date{}, errors.New("ethcal: invalid Gregorian date")
 	}
 	return FromTime(t), nil
 }
-
-// FromUTC converts a UTC time.Time to an Ethiopian Date.
-// The time is forced to UTC before extracting the calendar date.
-func FromUTC(t time.Time) Date {
-	return FromTime(t.UTC())
-}
-
-// Today returns the current Ethiopian date in the local time zone.
-func Today() Date { return FromTime(time.Now()) }
-
-// TodayUTC returns the current Ethiopian date in UTC.
-func TodayUTC() Date { return FromTime(time.Now().UTC()) }
-
-// TodayEAT returns the current Ethiopian date in East Africa Time (UTC+3).
-func TodayEAT() Date { return FromTime(time.Now().In(EAT)) }
-
-// TodayIn returns the current Ethiopian date in the specified location.
-// If loc is nil, UTC is used.
-func TodayIn(loc *time.Location) Date {
-	if loc == nil {
-		loc = time.UTC
-	}
-	return FromTime(time.Now().In(loc))
-}
-
-// Validate checks that the date exists in the Ethiopian calendar.
-func (d Date) Validate() error {
-	if d.Year < 1 {
-		return ErrInvalidYear
-	}
-	n, err := DaysInMonth(d.Year, d.Month)
-	if err != nil {
-		return err
-	}
-	if d.Day < 1 || d.Day > n {
-		return ErrInvalidDay
-	}
-	return nil
-}
-
-// Equal reports whether d and other represent the same date.
-func (d Date) Equal(other Date) bool {
-	return d.Year == other.Year && d.Month == other.Month && d.Day == other.Day
-}
-
-// String formats the date as "YYYY-MM-DD".
-func (d Date) String() string {
-	return fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day)
-}
-
-// FormatLong returns a long-form date such as "1 Meskerem 2000".
-func (d Date) FormatLong() string {
-	return fmt.Sprintf("%d %s %d", d.Day, MonthName(d.Month), d.Year)
-}
-
-// FormatAmharic returns a long-form date using the Amharic month name.
-func (d Date) FormatAmharic() string {
-	return fmt.Sprintf("%s %d, %d", MonthNameAmharic(d.Month), d.Day, d.Year)
-}
-
-// Weekday returns the Ethiopian day of the week for this date.
-func (d Date) Weekday() Weekday {
-	// JDN mod 7 gives: 0=Monday, 1=Tuesday, ..., 6=Sunday,
-	// which aligns with the Weekday constants.
-	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
-	return Weekday(mod(jdn, 7))
-}
-
-// Gregorian converts the Ethiopian date to a time.Time (midnight UTC).
-func (d Date) Gregorian() (time.Time, error) {
-	return d.GregorianIn(time.UTC)
-}
-
-// GregorianIn converts the Ethiopian date to a time.Time (midnight in loc).
-// If loc is nil, UTC is used.
-func (d Date) GregorianIn(loc *time.Location) (time.Time, error) {
-	if err := d.Validate(); err != nil {
-		return time.Time{}, err
-	}
-	if loc == nil {
-		loc = time.UTC
-	}
-	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
-	tUTC := time.Unix(int64(jdn-jdnUnixEpoch)*86400, 0).UTC()
-	y, m, day := tUTC.Date()
-	return time.Date(y, m, day, 0, 0, 0, 0, loc), nil
-}
-
-// GregorianYMD converts the Ethiopian date to Gregorian year, month, day.
-func (d Date) GregorianYMD() (int, time.Month, int, error) {
-	t, err := d.Gregorian()
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	y, m, dd := t.Date()
-	return y, m, dd, nil
-}
-
-// ---- JavaScript / API interop ----
 
 // FromISO parses an ISO 8601 date string (Gregorian) and converts it to an
 // Ethiopian Date. It accepts the formats commonly produced by JavaScript:
@@ -261,11 +164,11 @@ func FromISO(s string) (Date, error) {
 
 	// Try common ISO 8601 layouts in order of specificity.
 	for _, layout := range []string{
-		time.RFC3339Nano,          // 2006-01-02T15:04:05.999999999Z07:00
-		time.RFC3339,              // 2006-01-02T15:04:05Z07:00
-		"2006-01-02T15:04:05Z",   // explicit UTC
-		"2006-01-02T15:04:05",    // no timezone
-		"2006-01-02",             // date-only
+		time.RFC3339Nano,        // 2006-01-02T15:04:05.999999999Z07:00
+		time.RFC3339,            // 2006-01-02T15:04:05Z07:00
+		"2006-01-02T15:04:05Z", // explicit UTC
+		"2006-01-02T15:04:05",  // no timezone
+		"2006-01-02",           // date-only
 	} {
 		t, err = time.Parse(layout, s)
 		if err == nil {
@@ -281,11 +184,76 @@ func FromUnixMilli(ms int64) Date {
 	return FromTime(time.UnixMilli(ms).UTC())
 }
 
-// ISO returns the Gregorian equivalent of the Ethiopian date as an ISO 8601
+// Today returns the current Ethiopian date in the local time zone.
+func Today() Date { return FromTime(time.Now()) }
+
+// TodayIn returns the current Ethiopian date in the specified location.
+// If loc is nil, UTC is used.
+func TodayIn(loc *time.Location) Date {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return FromTime(time.Now().In(loc))
+}
+
+// ---- Date methods ----
+
+// Validate checks that the date exists in the Ethiopian calendar.
+func (d Date) Validate() error {
+	if d.Year < 1 {
+		return ErrInvalidYear
+	}
+	n, err := DaysInMonth(d.Year, d.Month)
+	if err != nil {
+		return err
+	}
+	if d.Day < 1 || d.Day > n {
+		return ErrInvalidDay
+	}
+	return nil
+}
+
+// String formats the date as "YYYY-MM-DD".
+func (d Date) String() string {
+	return fmt.Sprintf("%04d-%02d-%02d", d.Year, d.Month, d.Day)
+}
+
+// Format returns a long-form date such as "1 Meskerem 2000".
+func (d Date) Format() string {
+	return fmt.Sprintf("%d %s %d", d.Day, MonthName(d.Month), d.Year)
+}
+
+// Amharic returns a long-form date using the Amharic month name.
+func (d Date) Amharic() string {
+	return fmt.Sprintf("%s %d, %d", MonthNameAmharic(d.Month), d.Day, d.Year)
+}
+
+// Weekday returns the Ethiopian day of the week for this date.
+func (d Date) Weekday() Weekday {
+	// JDN mod 7 gives: 0=Monday, 1=Tuesday, ..., 6=Sunday,
+	// which aligns with the Weekday constants.
+	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
+	return Weekday(mod(jdn, 7))
+}
+
+// ---- Gregorian conversions ----
+
+// ToGregorian converts the Ethiopian date to a time.Time (midnight UTC).
+func (d Date) ToGregorian() (time.Time, error) {
+	if err := d.Validate(); err != nil {
+		return time.Time{}, err
+	}
+	jdn := ethiopicToJDN(d.Year, d.Month, d.Day)
+	return time.Unix(int64(jdn-jdnUnixEpoch)*86400, 0).UTC(), nil
+}
+
+// ---- JavaScript / API interop ----
+
+// ToISO returns the Gregorian equivalent of the Ethiopian date as an ISO 8601
 // string in UTC: "2023-09-12T00:00:00Z". This is the format expected by
 // JavaScript's new Date() constructor and JSON APIs.
-func (d Date) ISO() (string, error) {
-	t, err := d.Gregorian()
+func (d Date) ToISO() (string, error) {
+	t, err := d.ToGregorian()
 	if err != nil {
 		return "", err
 	}
@@ -296,7 +264,7 @@ func (d Date) ISO() (string, error) {
 // millisecond timestamp (midnight UTC). This matches the value produced by
 // JavaScript's Date.getTime() and can be used with new Date(ms) in JS.
 func (d Date) UnixMilli() (int64, error) {
-	t, err := d.Gregorian()
+	t, err := d.ToGregorian()
 	if err != nil {
 		return 0, err
 	}
@@ -342,6 +310,8 @@ func (d *Date) UnmarshalJSON(b []byte) error {
 	*d = parsed
 	return nil
 }
+
+// ---- Arithmetic ----
 
 // AddDays returns the Ethiopian date n days after (or before, if negative) d.
 func (d Date) AddDays(n int) (Date, error) {
@@ -420,4 +390,3 @@ func floorDiv[T int | int64](a, b T) T {
 func mod(a, b int) int {
 	return ((a % b) + b) % b
 }
-
