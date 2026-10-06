@@ -23,6 +23,7 @@ fmt.Println(ec.Weekday())       // Segno
 | `New(y, m, d)` | Create and validate an Ethiopian date |
 | `FromTime(t)` | Convert `time.Time` → Ethiopian date |
 | `FromYMD(y, m, d)` | Convert Gregorian year/month/day → Ethiopian date |
+| `FromUTC(t)` | Convert UTC `time.Time` → Ethiopian date |
 | `Today()` | Current Ethiopian date (local time zone) |
 | `TodayUTC()` | Current Ethiopian date (UTC) |
 | `TodayEAT()` | Current Ethiopian date in East Africa Time (`EAT`, UTC+3) |

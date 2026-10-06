@@ -183,6 +183,24 @@ func TestFromYMD(t *testing.T) {
 	}
 }
 
+func TestFromUTC(t *testing.T) {
+	// Basic: 2023-09-12 UTC → Ethiopian 2016-01-01
+	utcTime := time.Date(2023, time.September, 12, 15, 30, 0, 0, time.UTC)
+	got := FromUTC(utcTime)
+	want := Date{2016, 1, 1}
+	if got != want {
+		t.Errorf("FromUTC(%v) = %v; want %v", utcTime, got, want)
+	}
+
+	// Non-UTC input: 2023-09-13 00:30 EAT (= 2023-09-12 21:30 UTC)
+	// FromUTC should use the UTC date (Sep 12), not the EAT date (Sep 13).
+	eatTime := time.Date(2023, time.September, 13, 0, 30, 0, 0, EAT)
+	got = FromUTC(eatTime)
+	if got != want {
+		t.Errorf("FromUTC(%v) = %v; want %v (UTC date)", eatTime, got, want)
+	}
+}
+
 func TestToday(t *testing.T) {
 	d := Today()
 	if err := d.Validate(); err != nil {

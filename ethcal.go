@@ -142,6 +142,12 @@ func FromYMD(year int, month time.Month, day int) (Date, error) {
 	return FromTime(t), nil
 }
 
+// FromUTC converts a UTC time.Time to an Ethiopian Date.
+// The time is forced to UTC before extracting the calendar date.
+func FromUTC(t time.Time) Date {
+	return FromTime(t.UTC())
+}
+
 // Today returns the current Ethiopian date in the local time zone.
 func Today() Date { return FromTime(time.Now()) }
 
