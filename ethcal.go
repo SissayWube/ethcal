@@ -10,6 +10,8 @@ package ethcal
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -237,6 +239,108 @@ func (d Date) GregorianYMD() (int, time.Month, int, error) {
 	}
 	y, m, dd := t.Date()
 	return y, m, dd, nil
+}
+
+// ---- JavaScript / API interop ----
+
+// FromISO parses an ISO 8601 date string (Gregorian) and converts it to an
+// Ethiopian Date. It accepts the formats commonly produced by JavaScript:
+//
+//	"2026-10-06T09:00:00.000Z"   (Date.toISOString)
+//	"2026-10-06T09:00:00Z"       (without milliseconds)
+//	"2026-10-06T09:00:00+03:00"  (with offset)
+//	"2026-10-06"                 (date-only)
+func FromISO(s string) (Date, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return Date{}, errors.New("ethcal: empty ISO string")
+	}
+
+	var t time.Time
+	var err error
+
+	// Try common ISO 8601 layouts in order of specificity.
+	for _, layout := range []string{
+		time.RFC3339Nano,          // 2006-01-02T15:04:05.999999999Z07:00
+		time.RFC3339,              // 2006-01-02T15:04:05Z07:00
+		"2006-01-02T15:04:05Z",   // explicit UTC
+		"2006-01-02T15:04:05",    // no timezone
+		"2006-01-02",             // date-only
+	} {
+		t, err = time.Parse(layout, s)
+		if err == nil {
+			return FromTime(t.UTC()), nil
+		}
+	}
+	return Date{}, fmt.Errorf("ethcal: cannot parse ISO string %q: %w", s, err)
+}
+
+// FromUnixMilli converts a Unix millisecond timestamp (as returned by
+// JavaScript's Date.getTime() or Date.now()) to an Ethiopian Date in UTC.
+func FromUnixMilli(ms int64) Date {
+	return FromTime(time.UnixMilli(ms).UTC())
+}
+
+// ISO returns the Gregorian equivalent of the Ethiopian date as an ISO 8601
+// string in UTC: "2023-09-12T00:00:00Z". This is the format expected by
+// JavaScript's new Date() constructor and JSON APIs.
+func (d Date) ISO() (string, error) {
+	t, err := d.Gregorian()
+	if err != nil {
+		return "", err
+	}
+	return t.Format(time.RFC3339), nil
+}
+
+// UnixMilli returns the Gregorian equivalent of the Ethiopian date as a Unix
+// millisecond timestamp (midnight UTC). This matches the value produced by
+// JavaScript's Date.getTime() and can be used with new Date(ms) in JS.
+func (d Date) UnixMilli() (int64, error) {
+	t, err := d.Gregorian()
+	if err != nil {
+		return 0, err
+	}
+	return t.UnixMilli(), nil
+}
+
+// MarshalJSON implements encoding/json.Marshaler. The Ethiopian date is
+// serialized as an ISO-style string: "2016-01-01".
+func (d Date) MarshalJSON() ([]byte, error) {
+	if err := d.Validate(); err != nil {
+		return nil, err
+	}
+	return []byte(strconv.Quote(d.String())), nil
+}
+
+// UnmarshalJSON implements encoding/json.Unmarshaler. It accepts an Ethiopian
+// date string in "YYYY-MM-DD" format.
+func (d *Date) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return fmt.Errorf("ethcal: invalid JSON string: %w", err)
+	}
+	parts := strings.SplitN(s, "-", 3)
+	if len(parts) != 3 {
+		return fmt.Errorf("ethcal: invalid date format %q; want YYYY-MM-DD", s)
+	}
+	year, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return fmt.Errorf("ethcal: invalid year in %q: %w", s, err)
+	}
+	month, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return fmt.Errorf("ethcal: invalid month in %q: %w", s, err)
+	}
+	day, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return fmt.Errorf("ethcal: invalid day in %q: %w", s, err)
+	}
+	parsed, err := New(year, month, day)
+	if err != nil {
+		return err
+	}
+	*d = parsed
+	return nil
 }
 
 // AddDays returns the Ethiopian date n days after (or before, if negative) d.

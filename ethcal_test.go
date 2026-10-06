@@ -295,6 +295,146 @@ func TestGregorian_Invalid(t *testing.T) {
 	}
 }
 
+// ---- JavaScript / API interop ----
+
+func TestFromISO(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  Date
+	}{
+		{"toISOString", "2023-09-12T00:00:00.000Z", Date{2016, 1, 1}},
+		{"no millis", "2023-09-12T15:30:00Z", Date{2016, 1, 1}},
+		{"with offset", "2023-09-12T18:00:00+03:00", Date{2016, 1, 1}},
+		{"date only", "2023-09-12", Date{2016, 1, 1}},
+		{"whitespace", "  2023-09-12T00:00:00Z  ", Date{2016, 1, 1}},
+		{"near midnight EAT", "2023-09-13T00:30:00+03:00", Date{2016, 1, 1}}, // UTC is still Sep 12
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := FromISO(c.input)
+			if err != nil {
+				t.Fatalf("FromISO(%q) err: %v", c.input, err)
+			}
+			if got != c.want {
+				t.Errorf("FromISO(%q) = %v; want %v", c.input, got, c.want)
+			}
+		})
+	}
+
+	// Error cases
+	if _, err := FromISO(""); err == nil {
+		t.Error("FromISO empty should fail")
+	}
+	if _, err := FromISO("not-a-date"); err == nil {
+		t.Error("FromISO garbage should fail")
+	}
+}
+
+func TestFromUnixMilli(t *testing.T) {
+	// 2023-09-12T00:00:00Z = 1694476800000 ms
+	got := FromUnixMilli(1694476800000)
+	want := Date{2016, 1, 1}
+	if got != want {
+		t.Errorf("FromUnixMilli(1694476800000) = %v; want %v", got, want)
+	}
+
+	// With time component (should still use UTC date)
+	// 2023-09-12T23:59:59Z = 1694563199000 ms
+	got = FromUnixMilli(1694563199000)
+	if got != want {
+		t.Errorf("FromUnixMilli(1694563199000) = %v; want %v", got, want)
+	}
+}
+
+func TestISO(t *testing.T) {
+	d := Date{2016, 1, 1}
+	got, err := d.ISO()
+	if err != nil {
+		t.Fatalf("ISO() err: %v", err)
+	}
+	want := "2023-09-12T00:00:00Z"
+	if got != want {
+		t.Errorf("ISO() = %q; want %q", got, want)
+	}
+
+	// Invalid date
+	_, err = (Date{0, 1, 1}).ISO()
+	if err == nil {
+		t.Error("ISO on invalid date should fail")
+	}
+}
+
+func TestUnixMilli(t *testing.T) {
+	d := Date{2016, 1, 1}
+	got, err := d.UnixMilli()
+	if err != nil {
+		t.Fatalf("UnixMilli() err: %v", err)
+	}
+	var want int64 = 1694476800000 // 2023-09-12T00:00:00Z
+	if got != want {
+		t.Errorf("UnixMilli() = %d; want %d", got, want)
+	}
+
+	// Invalid date
+	_, err = (Date{0, 1, 1}).UnixMilli()
+	if err == nil {
+		t.Error("UnixMilli on invalid date should fail")
+	}
+}
+
+func TestJSON(t *testing.T) {
+	d := Date{2016, 1, 1}
+
+	// Marshal
+	b, err := d.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON err: %v", err)
+	}
+	if string(b) != `"2016-01-01"` {
+		t.Errorf("MarshalJSON = %s; want %q", b, "2016-01-01")
+	}
+
+	// Unmarshal
+	var d2 Date
+	if err := d2.UnmarshalJSON([]byte(`"2016-01-01"`)); err != nil {
+		t.Fatalf("UnmarshalJSON err: %v", err)
+	}
+	if d2 != d {
+		t.Errorf("UnmarshalJSON = %v; want %v", d2, d)
+	}
+
+	// Round-trip
+	var d3 Date
+	if err := d3.UnmarshalJSON(b); err != nil {
+		t.Fatalf("round-trip UnmarshalJSON err: %v", err)
+	}
+	if d3 != d {
+		t.Errorf("round-trip: got %v; want %v", d3, d)
+	}
+
+	// Marshal invalid
+	_, err = (Date{0, 1, 1}).MarshalJSON()
+	if err == nil {
+		t.Error("MarshalJSON on invalid date should fail")
+	}
+
+	// Unmarshal invalid format
+	if err := d2.UnmarshalJSON([]byte(`"not-a-date"`)); err == nil {
+		t.Error("UnmarshalJSON garbage should fail")
+	}
+
+	// Unmarshal invalid Ethiopian date
+	if err := d2.UnmarshalJSON([]byte(`"0000-01-01"`)); err == nil {
+		t.Error("UnmarshalJSON invalid Ethiopian date should fail")
+	}
+
+	// Unmarshal non-string
+	if err := d2.UnmarshalJSON([]byte(`12345`)); err == nil {
+		t.Error("UnmarshalJSON non-string should fail")
+	}
+}
+
 // ---- AddDays ----
 
 func TestAddDays(t *testing.T) {

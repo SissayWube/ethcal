@@ -31,6 +31,13 @@ fmt.Println(ec.Weekday())       // Segno
 | `d.Gregorian()` | Ethiopian date → `time.Time` (midnight UTC) |
 | `d.GregorianIn(loc)` | Ethiopian date → `time.Time` (midnight in `*time.Location`) |
 | `d.GregorianYMD()` | Ethiopian date → Gregorian year, month, day |
+| **JavaScript / API** | |
+| `FromISO(s)` | Parse ISO 8601 string (e.g. `Date.toISOString()`) → Ethiopian date |
+| `FromUnixMilli(ms)` | Parse JS `Date.getTime()` millisecond timestamp → Ethiopian date |
+| `d.ISO()` | Ethiopian date → Gregorian ISO 8601 string (`"2023-09-12T00:00:00Z"`) |
+| `d.UnixMilli()` | Ethiopian date → Unix milliseconds (for JS `new Date(ms)`) |
+| `d.MarshalJSON()` | JSON marshal as `"2016-01-01"` (Ethiopian) |
+| `d.UnmarshalJSON()` | JSON unmarshal from `"2016-01-01"` (Ethiopian) |
 | `d.AddDays(n)` | Add or subtract days |
 | `d.AddMonths(n)` | Add or subtract months (clamps day if needed) |
 | `d.AddYears(n)` | Add or subtract years (clamps Pagume 6 if needed) |
